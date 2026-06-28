@@ -1,0 +1,143 @@
+/* VeriAudit design tokens — copied verbatim from VeriAudit_screens/VeriAudit.dc.html
+   so the production UI matches the mockup. */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+
+:root {
+  --bg: #0B0E14; --surface: #141821; --elev: #1C212C; --border: #232936;
+  --text: #ECEDEE; --text2: #9BA1A6; --muted: #6B7280;
+  --accent: #3DA9FC; --accent-weak: rgba(61,169,252,0.12);
+  --crit: #E5484D; --high: #F76808; --med: #FFB224; --low: #46A758; --info: #8B8D98;
+  --ok: #46A758; --ok-weak: rgba(70,167,88,0.12);
+  --crit-weak: rgba(229,72,77,0.12); --high-weak: rgba(247,104,8,0.12);
+  --med-weak: rgba(255,178,36,0.12);
+  --shadow: 0 1px 0 rgba(0,0,0,0.4);
+}
+[data-theme="light"] {
+  --bg: #F7F8FA; --surface: #FFFFFF; --elev: #FFFFFF; --border: #E3E6EB;
+  --text: #1A1D24; --text2: #5B616B; --muted: #8A909A;
+  --accent-weak: rgba(61,169,252,0.10);
+  --crit-weak: rgba(229,72,77,0.08); --high-weak: rgba(247,104,8,0.08);
+  --med-weak: rgba(255,178,36,0.10); --ok-weak: rgba(70,167,88,0.10);
+  --shadow: 0 1px 2px rgba(16,24,40,0.06);
+}
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: var(--bg); color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+.mono { font-family: 'JetBrains Mono', monospace; }
+
+/* Header */
+.header {
+  position: sticky; top: 0; z-index: 50;
+  display: flex; align-items: center; gap: 28px; height: 56px; padding: 0 24px;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+}
+.brand { display: flex; align-items: center; gap: 10px; cursor: pointer; font-weight: 700; font-size: 16px; letter-spacing: -0.02em; }
+.brand .logo { color: var(--accent); }
+.nav { display: flex; gap: 2px; }
+.nav button {
+  background: transparent; border: none; cursor: pointer; color: var(--text2);
+  font: inherit; font-size: 13.5px; font-weight: 500; padding: 8px 12px; border-radius: 8px;
+}
+.nav button:hover { color: var(--text); background: var(--elev); }
+.nav button.active { color: var(--text); background: var(--elev); }
+.header-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px;
+  background: var(--elev); border: 1px solid var(--border); border-radius: 8px;
+  font-size: 12.5px; color: var(--text2);
+}
+.chip .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--low); box-shadow: 0 0 6px var(--low); }
+.icon-btn {
+  width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
+  background: var(--elev); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; color: var(--text2);
+}
+
+/* Layout */
+main { max-width: 1440px; margin: 0 auto; padding: 24px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+.card h2 { margin: 0 0 16px 0; font-size: 16px; font-weight: 600; }
+.muted { color: var(--text2); }
+.dim { color: var(--muted); }
+.row { display: flex; gap: 16px; flex-wrap: wrap; }
+.col { display: flex; flex-direction: column; gap: 12px; }
+
+/* Tabs */
+.tabs { display: flex; gap: 4px; margin-bottom: 16px; background: var(--elev); padding: 4px; border-radius: 10px; width: fit-content; }
+.tabs button {
+  background: transparent; border: none; cursor: pointer; color: var(--text2);
+  font: inherit; font-size: 13px; font-weight: 500; padding: 8px 14px; border-radius: 7px;
+}
+.tabs button.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+
+/* Form */
+textarea, input[type="text"] {
+  width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+  color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 12.5px; padding: 12px;
+  resize: vertical; outline: none;
+}
+textarea:focus, input:focus { border-color: var(--accent); }
+label { font-size: 12px; color: var(--text2); font-weight: 500; margin-bottom: 6px; display: block; }
+.btn {
+  background: var(--accent); color: #0B0E14; border: none; border-radius: 8px;
+  font: inherit; font-weight: 600; font-size: 13.5px; padding: 10px 18px; cursor: pointer;
+}
+.btn:hover { filter: brightness(1.08); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn.secondary { background: var(--elev); color: var(--text); border: 1px solid var(--border); }
+
+/* Stepper */
+.stepper { display: flex; gap: 8px; flex-wrap: wrap; }
+.stage {
+  display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 8px;
+  background: var(--elev); border: 1px solid var(--border); font-size: 12px; color: var(--text2);
+}
+.stage.done { color: var(--low); border-color: rgba(70,167,88,0.4); background: var(--ok-weak); }
+.stage.running { color: var(--accent); border-color: rgba(61,169,252,0.4); background: var(--accent-weak); }
+.stage .check { font-size: 13px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.stage.running .check { animation: spin 1s linear infinite; display: inline-block; }
+
+/* Severity badges */
+.badge {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600;
+  padding: 3px 8px; border-radius: 6px; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.badge.Critical { background: var(--crit-weak); color: var(--crit); }
+.badge.High { background: var(--high-weak); color: var(--high); }
+.badge.Medium { background: var(--med-weak); color: var(--med); }
+.badge.Low { background: var(--ok-weak); color: var(--low); }
+.badge.Info { background: var(--accent-weak); color: var(--info); }
+
+.exploit { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 6px; }
+.exploit.proven { background: var(--crit-weak); color: var(--crit); }
+.exploit.unconfirmed { background: var(--med-weak); color: var(--med); }
+.exploit.not_supported { background: var(--accent-weak); color: var(--info); }
+
+/* Finding card */
+.finding { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 12px; }
+.finding-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+.finding-id { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--muted); }
+.finding-type { font-weight: 600; font-size: 14px; }
+.finding-swc { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text2); }
+.finding p { margin: 6px 0; font-size: 13px; line-height: 1.5; color: var(--text2); }
+.finding .loc { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); }
+.fix { background: var(--ok-weak); border: 1px solid rgba(70,167,88,0.3); border-radius: 8px; padding: 10px 12px; font-size: 12.5px; color: var(--text); margin-top: 8px; }
+
+/* Risk gauge */
+.gauge { display: flex; align-items: center; gap: 16px; }
+.gauge .score { font-size: 32px; font-weight: 700; line-height: 1; }
+
+/* Verify */
+.verify-result { padding: 16px; border-radius: 10px; font-size: 14px; }
+.verify-result.match { background: var(--ok-weak); border: 1px solid rgba(70,167,88,0.4); color: var(--low); }
+.verify-result.mismatch { background: var(--crit-weak); border: 1px solid rgba(229,72,77,0.4); color: var(--crit); }
+
+.honesty { font-size: 11.5px; color: var(--muted); border-top: 1px dashed var(--border); padding-top: 12px; margin-top: 16px; }
+.honesty strong { color: var(--text2); }
+
+a { color: var(--accent); }
+.spacer { flex: 1; }

@@ -1,0 +1,15 @@
+# VeriAudit AI analysis worker dependencies.
+# This is the ONLY Python in the platform (per the smart-contract-first plan).
+# Chain orchestration, API, and verification live in TypeScript (../orchestrator).
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+pydantic>=2.7.0
+pydantic-settings>=2.3.0
+eth-hash[pycryptodome]>=0.7.0
+py-solc-x>=2.0.3
+slither-analyzer>=0.10.0
+httpx>=0.27.0
+GitPython>=3.1.0
+# Optional real LLM providers (mock is the default). Uncomment when wiring:
+# openai>=1.30.0
+# anthropic>=0.30.0
