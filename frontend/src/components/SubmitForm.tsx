@@ -61,7 +61,7 @@ export function SubmitForm() {
           setBusy(false);
           return;
         }
-        await new Promise((r) => setTimeout(r, 1500));
+        await new Promise((r) => setTimeout(r, 1200));
       }
     };
     void poll();
@@ -83,7 +83,7 @@ export function SubmitForm() {
 
   return (
     <div className="col">
-      <div className="card">
+      <div className="card framed reveal reveal-1">
         <h2>Submit contract for audit</h2>
         <div className="tabs">
           {(["source", "address", "repo"] as Mode[]).map((m) => (
@@ -96,40 +96,40 @@ export function SubmitForm() {
         {mode === "source" && (
           <div>
             <label>Solidity source</label>
-            <textarea rows={10} value={source} onChange={(e) => setSource(e.target.value)} />
+            <textarea rows={9} value={source} onChange={(e) => setSource(e.target.value)} spellCheck={false} />
           </div>
         )}
         {mode === "address" && (
           <div>
             <label>Contract address (0x…)</label>
-            <input type="text" placeholder="0x9fE4…" value={address} onChange={(e) => setAddress(e.target.value)} />
+            <input type="text" placeholder="0x9fE4…" value={address} onChange={(e) => setAddress(e.target.value)} spellCheck={false} />
           </div>
         )}
         {mode === "repo" && (
           <div className="row">
             <div style={{ flex: 2 }}>
               <label>Git URL</label>
-              <input type="text" placeholder="https://github.com/…/repo.git" value={repo} onChange={(e) => setRepo(e.target.value)} />
+              <input type="text" placeholder="https://github.com/…/repo.git" value={repo} onChange={(e) => setRepo(e.target.value)} spellCheck={false} />
             </div>
             <div style={{ flex: 1 }}>
-              <label>Commit hash (optional)</label>
-              <input type="text" placeholder="HEAD or 0xabc…" value={commit} onChange={(e) => setCommit(e.target.value)} />
+              <label>Commit (optional)</label>
+              <input type="text" placeholder="HEAD or 0xabc…" value={commit} onChange={(e) => setCommit(e.target.value)} spellCheck={false} />
             </div>
           </div>
         )}
 
-        <div style={{ marginTop: 16 }}>
+        <div style={{ marginTop: 18 }}>
           <button className="btn" onClick={submit} disabled={busy}>
-            {busy ? "Analyzing…" : "Run audit"}
+            {busy ? "Analyzing…" : "▸ Run audit"}
           </button>
         </div>
       </div>
 
       {status && (
-        <div className="card">
+        <div className="card reveal reveal-2">
           <h2>Pipeline progress</h2>
-          <Stepper stages={status.stages} running={status.status === "running"} />
-          {status.error && <p className="muted">Error: {status.error}</p>}
+          <PipelineRail stages={status.stages} running={status.status === "running"} />
+          {status.error && <p className="muted" style={{ marginTop: 14 }}>Error: {status.error}</p>}
         </div>
       )}
 
@@ -148,75 +148,83 @@ export function SubmitForm() {
       )}
 
       {error && (
-        <div className="card" style={{ borderColor: "var(--crit)" }}>
-          <p style={{ color: "var(--crit)", margin: 0 }}>{error}</p>
+        <div className="card reveal" style={{ borderColor: "var(--crit)" }}>
+          <p className="mono" style={{ color: "var(--crit)", margin: 0, fontSize: 13 }}>! {error}</p>
         </div>
       )}
 
       <p className="honesty">
-        <strong>Honesty note:</strong> AI = first-pass triage + monitoring, not a human-auditor replacement. Only
+        <strong>Honesty note —</strong> AI = first-pass triage + monitoring, not a human-auditor replacement. Only
         supported vulnerability classes can be marked “proven”; everything else is “detected-but-not-auto-validated.”
       </p>
     </div>
   );
 }
 
-function Stepper({ stages, running }: { stages: string[]; running: boolean }) {
+/** Instrument-style horizontal rail. The signature visualization of the pipeline. */
+function PipelineRail({ stages, running }: { stages: string[]; running: boolean }) {
   const done = new Set(stages);
   const runningStage = running && stages.length < PIPELINE_STAGES.length ? PIPELINE_STAGES[stages.length] : null;
   return (
-    <div className="stepper">
-      {PIPELINE_STAGES.map((s) => {
-        const cls = done.has(s) ? "done" : s === runningStage ? "running" : "";
-        return (
-          <div key={s} className={`stage ${cls}`}>
-            <span className="check">{done.has(s) ? "✓" : s === runningStage ? "↻" : "·"}</span>
-            {s}
-          </div>
-        );
-      })}
+    <div className="rail-wrap">
+      <div className="rail">
+        {PIPELINE_STAGES.map((s) => {
+          const state = done.has(s) ? "done" : s === runningStage ? "running" : "";
+          const glyph = done.has(s) ? "✓" : s === runningStage ? "" : String(PIPELINE_STAGES.indexOf(s) + 1).padStart(2, "0");
+          return (
+            <div key={s} className={`rail-node ${state}`}>
+              <div className="rail-bubble">{glyph}</div>
+              <div className="rail-label">{s}</div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
 function SummaryCard({ report }: { report: Report }) {
-  const counts: Record<string, number> = {};
-  for (const f of report.findings) counts[f.severity] = (counts[f.severity] ?? 0) + 1;
   const tone = report.severity_score >= 70 ? "var(--crit)" : report.severity_score >= 40 ? "var(--med)" : "var(--low)";
-  const circ = 226;
-  const offset = circ - (circ * report.severity_score) / 100;
+  const offset = 226 - (226 * report.severity_score) / 100;
+  const verdict =
+    report.severity_score >= 70 ? "HIGH RISK" : report.severity_score >= 40 ? "ELEVATED" : report.severity_score > 0 ? "LOW RISK" : "CLEAN";
   return (
-    <div className="card">
-      <div className="row" style={{ alignItems: "center" }}>
+    <div className="card framed reveal reveal-2">
+      <h2>Audit summary · {verdict}</h2>
+      <div className="gauge-wrap">
         <div className="gauge">
-          <svg width="84" height="84" viewBox="0 0 84 84" style={{ transform: "rotate(-90deg)" }}>
-            <circle cx="42" cy="42" r="36" fill="none" stroke="var(--border)" strokeWidth="7" />
-            <circle cx="42" cy="42" r="36" fill="none" stroke={tone} strokeWidth="7" strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={offset} />
+          <svg width="120" height="120" viewBox="0 0 84 84">
+            <circle className="track" cx="42" cy="42" r="36" />
+            <circle className="arc" cx="42" cy="42" r="36" stroke={tone} strokeDashoffset={offset} />
           </svg>
-          <div>
-            <div className="score" style={{ color: tone }}>
-              {report.severity_score}
-            </div>
-            <div className="dim" style={{ fontSize: 11 }}>RISK / 100</div>
+          <div className="gauge-center">
+            <span className="score" style={{ color: tone }}>{report.severity_score}</span>
+            <span className="unit">risk / 100</span>
           </div>
         </div>
-        <div className="spacer" />
-        <div className="col">
-          {(["Critical", "High", "Medium", "Low", "Info"] as const).map((sev) => (
-            <div key={sev} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
-              <span className={`badge ${sev}`} style={{ padding: "2px 6px" }}>{counts[sev] ?? 0}</span>
-              <span className="muted">{sev}</span>
+        <div className="stat-grid">
+          <div className="stat">
+            <div className="k">exploit</div>
+            <div className="v" style={{ color: report.exploit_proven ? "var(--crit)" : "var(--text2)" }}>
+              {report.exploit_proven ? "PROVEN" : "none"}
             </div>
-          ))}
-        </div>
-        <div className="col">
-          <div style={{ fontSize: 12, color: "var(--text2)" }}>
-            exploit:{" "}
-            {report.exploit_proven ? <span className="exploit proven">proven</span> : <span className="exploit not_supported">none proven</span>}
           </div>
-          <div className="mono dim" style={{ fontSize: 11 }}>reportHash: {report.report_hash.slice(0, 18)}…</div>
-          <div className="mono dim" style={{ fontSize: 11 }}>bytecode: {report.fingerprints.bytecode_hash.slice(0, 18)}…</div>
-          <div className="mono dim" style={{ fontSize: 11 }}>solc: {report.fingerprints.compiler_version}</div>
+          <div className="stat">
+            <div className="k">findings</div>
+            <div className="v">{report.findings.length}</div>
+          </div>
+          <div className="stat">
+            <div className="k">solc</div>
+            <div className="v">{report.fingerprints.compiler_version}</div>
+          </div>
+          <div className="stat">
+            <div className="k">report hash</div>
+            <div className="v small mono">{report.report_hash.slice(0, 20)}…</div>
+          </div>
+          <div className="stat">
+            <div className="k">bytecode hash</div>
+            <div className="v small mono">{report.fingerprints.bytecode_hash.slice(0, 20)}…</div>
+          </div>
         </div>
       </div>
     </div>
@@ -226,32 +234,42 @@ function SummaryCard({ report }: { report: Report }) {
 function FindingsCard({ report }: { report: Report }) {
   if (report.findings.length === 0) {
     return (
-      <div className="card">
+      <div className="card reveal reveal-3">
         <h2>Findings</h2>
-        <p className="muted">No findings from the static + ML + LLM passes.</p>
+        <div className="empty">
+          <div className="glyph">○</div>
+          <div>No findings from the static + ML + LLM passes.</div>
+        </div>
       </div>
     );
   }
   return (
-    <div className="card">
-      <h2>Findings ({report.findings.length})</h2>
-      {report.findings.map((f) => (
-        <div key={f.id} className="finding">
-          <div className="finding-head">
-            <span className="finding-id">{f.id}</span>
-            <span className="finding-type">{f.type}</span>
-            <span className={`badge ${f.severity}`}>{f.severity}</span>
-            <span className="exploit">{f.exploit_status}</span>
-            <span className="finding-swc">{f.swc_id}</span>
-            <span className="spacer" />
-            <span className="loc">
-              {f.location.file}:{f.location.lines.join("-")}
-            </span>
+    <div className="card reveal reveal-3">
+      <h2>Findings · {report.findings.length}</h2>
+      <div className="findings-list">
+        {report.findings.map((f, i) => (
+          <div key={f.id} className={`finding sev-${f.severity}`} style={{ animationDelay: `${0.3 + i * 0.06}s` }}>
+            <div className="finding-head">
+              <span className="finding-id">{f.id}</span>
+              <span className="finding-type">{f.type}</span>
+              <span className={`badge ${f.severity}`}>{f.severity}</span>
+              <span className={`exploit ${f.exploit_status}`}>{f.exploit_status.replace("_", " ")}</span>
+              <span className="finding-swc">{f.swc_id}</span>
+              <span className="spacer" />
+              <span className="loc">
+                {f.location.file}:{f.location.lines.join("-")}
+              </span>
+            </div>
+            <p>{f.explanation}</p>
+            {f.suggested_fix && (
+              <div className="fix">
+                <div className="fix-head">▸ Suggested fix</div>
+                {f.suggested_fix}
+              </div>
+            )}
           </div>
-          <p>{f.explanation}</p>
-          {f.suggested_fix && <div className="fix">Suggested fix: {f.suggested_fix}</div>}
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
@@ -270,23 +288,20 @@ function AttestCard({
   disabled: boolean;
 }) {
   return (
-    <div className="card">
+    <div className="card framed reveal reveal-4">
       <h2>Attest on-chain</h2>
-      <p className="muted" style={{ fontSize: 13 }}>
-        Records the report hash + fingerprints on AuditRegistry. Required for trustless /verify.
+      <p className="muted" style={{ fontSize: 13, margin: "0 0 14px" }}>
+        EIP-712 signs the report hash + fingerprints, then submits <span className="mono">recordAudit()</span> to the
+        registry. Required for trustless <span className="mono">/verify</span>.
       </p>
       <label>Contract address to attest against</label>
-      <input type="text" placeholder="0x…" value={contractAddress} onChange={(e) => setContractAddress(e.target.value)} />
-      <div style={{ marginTop: 12 }}>
+      <input type="text" placeholder="0x…" value={contractAddress} onChange={(e) => setContractAddress(e.target.value)} spellCheck={false} />
+      <div style={{ marginTop: 14 }}>
         <button className="btn" onClick={onAttest} disabled={disabled || !contractAddress}>
-          Sign + submit attestation
+          ⚡ Sign + submit attestation
         </button>
       </div>
-      {attestTx && (
-        <p className="mono" style={{ fontSize: 12, color: "var(--low)", marginTop: 12 }}>
-          ✓ tx: {attestTx}
-        </p>
-      )}
+      {attestTx && <div className="tx-pill">✓ tx {attestTx}</div>}
     </div>
   );
 }

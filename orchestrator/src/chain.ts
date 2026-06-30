@@ -48,8 +48,31 @@ export interface AuditRecord {
   auditor: Address;
 }
 
+// A module-level async mutex around recordAudit. Two concurrent /attest calls
+// would both read the same nonce, sign, and submit — one tx would revert (or
+// worse, race the contract's checked-nonce logic). Serializing keeps the
+// sequential nonce model correct under concurrent requests.
+let _recordChain: Promise<unknown> = Promise.resolve();
+function withRecordLock<T>(fn: () => Promise<T>): Promise<T> {
+  const run = _recordChain.then(fn, fn);
+  // Swallow rejections on the chain so a failed tx doesn't break the next call.
+  _recordChain = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
 /** Sign + submit a recordAudit tx. Returns the tx hash. */
 export async function recordAudit(
+  bundle: WorkerResponse,
+  contractAddress: Address,
+  ipfsCid: string,
+): Promise<{ txHash: Hash; att: Attestation }> {
+  return withRecordLock(() => _recordAudit(bundle, contractAddress, ipfsCid));
+}
+
+async function _recordAudit(
   bundle: WorkerResponse,
   contractAddress: Address,
   ipfsCid: string,

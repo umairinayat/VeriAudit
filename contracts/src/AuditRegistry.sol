@@ -97,14 +97,27 @@ contract AuditRegistry is IAuditRegistry, EIP712, Nonces, ReentrancyGuard, Ownab
 
     /// @inheritdoc IAuditRegistry
     /// @dev v1 stub: owner-only. A full governance / challenge module can replace
-    ///      this without changing the ABI.
+    ///      this without changing the ABI. Slashing ALSO deregisters the auditor
+    ///      (sets registered=false) so they cannot keep attesting after a slash —
+    ///      a zeroed bond must revoke attestation rights. The slashed ETH stays
+    ///      in the contract for the owner to recover via `sweep()`.
     function slashAuditor(address auditor, string calldata reason) external override onlyOwner {
         Auditor storage a = _auditors[auditor];
         require(a.registered, "Not registered");
         uint256 amount = a.staked;
-        // Slash to contract balance; owner can recover via sweep (omitted in v1).
         a.staked = 0;
+        a.registered = false; // revoke attestation rights immediately
         emit AuditorSlashed(auditor, amount, reason);
+    }
+
+    /// @notice Owner-only recovery of ETH that lands in the contract via
+    ///         slashing, direct sends (`receive()`), or refunds to deleted
+    ///         auditors. Without this, slashed/donated ETH would be stranded.
+    function sweep(address payable to) external onlyOwner nonReentrant {
+        require(to != address(0), "sweep to zero");
+        uint256 amount = address(this).balance;
+        (bool ok,) = to.call{value: amount}("");
+        require(ok, "sweep failed");
     }
 
     // ============================================================
@@ -125,9 +138,14 @@ contract AuditRegistry is IAuditRegistry, EIP712, Nonces, ReentrancyGuard, Ownab
         // 1. Signature lifetime.
         require(block.timestamp <= att.deadline, "Signature expired");
 
-        // 2. Recover signer via EIP-712 and require registration.
+        // 2. Recover signer via EIP-712 and require an ACTIVE auditor (registered
+        //    AND still carrying stake). A slashed auditor (registered=false,
+        //    staked=0) must not be able to attest — the bond is the slashing
+        //    surface, so a zeroed bond revokes attestation rights.
         address signer = _recoverSigner(att, signature);
-        require(_auditors[signer].registered, "Signer not registered");
+        Auditor storage signerAuditor = _auditors[signer];
+        require(signerAuditor.registered, "Signer not registered");
+        require(signerAuditor.staked > 0, "Auditor stake slashed");
 
         // 3. Replay protection (sequential per-auditor nonce). The signed
         //    att.nonce MUST equal the auditor's next-expected nonce; OZ reverts
@@ -143,6 +161,14 @@ contract AuditRegistry is IAuditRegistry, EIP712, Nonces, ReentrancyGuard, Ownab
             require(bytes(ipfsCid).length == 0, "IPFS cid not expected");
         } else {
             require(keccak256(bytes(ipfsCid)) == att.ipfsCidCommitment, "IPFS CID mismatch");
+        }
+
+        // 4b. Bundle integrity: any emitted bundle MUST hash to the signed
+        //     `reportHash`. Without this a relayer could swap the `bundle` bytes
+        //     in the calldata while the on-chain reportHash stays correct, so the
+        //     on-chain "full bundle via event" would not match the signed report.
+        if (bundle.length > 0) {
+            require(keccak256(bundle) == att.reportHash, "Bundle hash mismatch");
         }
 
         // 5. Store compact record.

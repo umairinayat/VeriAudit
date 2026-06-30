@@ -27,6 +27,13 @@ export const config = {
   auditorAddress: required("AUDITOR_ADDRESS") as `0x${string}`,
   reportStorage: optional("REPORT_STORAGE", "./.reports"),
   ipfsApi: optional("IPFS_API", ""), // empty = no IPFS pinning; bundle stored as event + local
+  // Optional bearer-token auth on mutating endpoints (POST /audit, POST /attest).
+  // If unset, the server runs in permissive DEV mode and logs a loud warning.
+  // NEVER leave unset on a deployed orchestrator: /attest signs + submits
+  // on-chain transactions with the auditor key.
+  apiKey: optional("ORCH_API_KEY", ""),
+  // CORS allowlist (comma-separated origins). Empty = allow all (dev only).
+  corsOrigins: optional("ORCH_CORS_ORIGINS", ""),
   eip712: {
     name: "VeriAudit",
     version: "1",

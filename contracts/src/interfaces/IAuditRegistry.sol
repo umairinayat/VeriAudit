@@ -61,6 +61,7 @@ interface IAuditRegistry {
     function registerAuditor() external payable;
     function unregisterAuditor() external;
     function slashAuditor(address auditor, string calldata reason) external;
+    function sweep(address payable to) external;
 
     // ---------- Attestation (write path) ----------
     function recordAudit(

@@ -18,20 +18,49 @@ import type { Address } from "viem";
 
 const auditBody = z.object({
   mode: z.enum(["source", "address", "repo"]),
-  source: z.string().optional(),
+  // Cap source/repo size to prevent worker DoS (a multi-MB source triggers
+  // solc + Slither + forge runs). 512 KB is generous for real contracts.
+  source: z.string().max(512 * 1024).optional(),
   address: z.string().regex(/^0x[a-fA-F0-9]{40}$/).optional(),
-  repo: z.string().optional(),
-  commit: z.string().optional(),
+  repo: z.string().max(2048).optional(),
+  commit: z.string().max(128).optional(),
 });
+
+const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
+
+/** Bearer-token auth gate for mutating endpoints. If ORCH_API_KEY is unset the
+ *  server runs in permissive DEV mode (and logs a warning at boot). */
+function requireAuth(req: { headers: Record<string, string | string[] | undefined> }, reply: any): boolean {
+  if (!config.apiKey) return true; // dev mode
+  const auth = req.headers.authorization;
+  const tok = Array.isArray(auth) ? auth[0] : auth;
+  const expected = `Bearer ${config.apiKey}`;
+  if (tok !== expected) {
+    reply.code(401).send({ error: "unauthorized" });
+    return false;
+  }
+  return true;
+}
 
 export async function buildServer() {
   const app = Fastify({ logger: true });
-  await app.register(cors, { origin: true });
 
-  app.get("/health", async () => ({ status: "ok", registry: config.registryAddress }));
+  // CORS allowlist. Empty ORCH_CORS_ORIGINS = allow all (dev). In production,
+  // set it to the frontend origin so cross-origin browsers can't drive /attest.
+  const origins = config.corsOrigins
+    ? config.corsOrigins.split(",").map((s) => s.trim()).filter(Boolean)
+    : true;
+  await app.register(cors, { origin: origins });
+
+  if (!config.apiKey) {
+    app.log.warn("ORCH_API_KEY unset — running in DEV mode with NO auth on /audit and /attest. Never do this in production.");
+  }
+
+  app.get("/health", async () => ({ status: "ok", registry: config.registryAddress, auth: !!config.apiKey }));
 
   // ---------- POST /audit ----------
   app.post("/audit", async (req, reply) => {
+    if (!requireAuth(req, reply)) return;
     const parsed = auditBody.safeParse(req.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: parsed.error.flatten() });
@@ -96,6 +125,7 @@ export async function buildServer() {
 
   // ---------- POST /attest/:id ----------
   app.post("/attest/:id", async (req, reply) => {
+    if (!requireAuth(req, reply)) return;
     const job = getJob((req.params as { id: string }).id);
     if (!job) return reply.code(404).send({ error: "job not found" });
     if (job.status !== "done" || !job.bundle) {
@@ -103,12 +133,11 @@ export async function buildServer() {
     }
     // Need a contract address: require one in the body OR from the job.
     const body = (req.body ?? {}) as { contractAddress?: string };
-    const contractAddress = (body.contractAddress ?? job.contractAddress) as Address | undefined;
-    if (!contractAddress) {
-      return reply.code(400).send({
-        error: "contractAddress required (job had none; pass it in the body)",
-      });
+    const contractAddressRaw = (body.contractAddress ?? job.contractAddress) ?? "";
+    if (!ADDRESS_RE.test(contractAddressRaw)) {
+      return reply.code(400).send({ error: "valid contractAddress (0x…) required" });
     }
+    const contractAddress = contractAddressRaw as Address;
     try {
       await ensureAuditorRegistered();
       const pinned = await pinBundle(job.bundle.bundle_canonical);
@@ -117,15 +146,17 @@ export async function buildServer() {
       return { txHash, reportHash: job.reportHash, ipfsCid: pinned.cid, pinned: pinned.pinned };
     } catch (e) {
       req.log.error({ err: e }, "attest failed");
-      return reply.code(500).send({ error: e instanceof Error ? e.message : String(e) });
+      // Don't leak internal error text to the client; log full detail server-side.
+      return reply.code(500).send({ error: "attestation failed", detail: e instanceof Error ? e.message : String(e) });
     }
   });
 
   // ---------- GET /verify/:address ----------
   app.get("/verify/:address", async (req, reply) => {
-    const addr = (req.params as { address: string }).address as Address;
+    const addr = (req.params as { address: string }).address;
+    if (!ADDRESS_RE.test(addr)) return reply.code(400).send({ error: "invalid address" });
     try {
-      const v = await verifyBytecode(addr);
+      const v = await verifyBytecode(addr as Address);
       return {
         address: addr,
         matches: v.matches,
@@ -136,18 +167,19 @@ export async function buildServer() {
         auditIndex: Number(v.auditIndex),
       };
     } catch (e) {
-      // Contract reverts "No audit found" -> map to 404.
       const msg = e instanceof Error ? e.message : String(e);
       if (/No audit/i.test(msg)) return reply.code(404).send({ error: msg, address: addr });
-      return reply.code(500).send({ error: msg, address: addr });
+      req.log.error({ err: e }, "verify failed");
+      return reply.code(500).send({ error: "verify failed" });
     }
   });
 
   // ---------- GET /history/:address ----------
   app.get("/history/:address", async (req, reply) => {
-    const addr = (req.params as { address: string }).address as Address;
+    const addr = (req.params as { address: string }).address;
+    if (!ADDRESS_RE.test(addr)) return reply.code(400).send({ error: "invalid address" });
     try {
-      const history = await getHistory(addr);
+      const history = await getHistory(addr as Address);
       return {
         address: addr,
         count: history.length,
@@ -164,7 +196,8 @@ export async function buildServer() {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (/No audit/i.test(msg)) return reply.code(404).send({ error: msg, address: addr });
-      return reply.code(500).send({ error: msg, address: addr });
+      req.log.error({ err: e }, "history failed");
+      return reply.code(500).send({ error: "history failed" });
     }
   });
 

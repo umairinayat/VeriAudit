@@ -142,10 +142,13 @@ contract AuditRegistryTest is Test {
         _registerAuditor(auditor);
 
         SampleTarget target = new SampleTarget();
-        (IAuditRegistry.Attestation memory att, bytes memory sig) =
-            _signAttestation(address(target), keccak256("report"), 42, true, 0);
-
+        // The bundle's keccak256 MUST equal the signed reportHash (enforced
+        // on-chain). Compute them together so the test stays honest.
         bytes memory bundle = bytes('{"findings":[]}');
+        bytes32 reportHash = keccak256(bundle);
+        (IAuditRegistry.Attestation memory att, bytes memory sig) =
+            _signAttestation(address(target), reportHash, 42, true, 0);
+
         vm.expectEmit(true, true, true, true);
         emit AuditRecorded(
             address(target), att.reportHash, att.bytecodeHash, bytes32(0), 42, true, auditor
@@ -362,5 +365,57 @@ contract AuditRegistryTest is Test {
 
         IAuditRegistry.Auditor memory a2 = registry.getAuditor(auditor);
         assertEq(a2.staked, 0, "staked zeroed");
+        assertFalse(a2.registered, "deregistered after slash");
+    }
+
+    // Regression for the slash-doesn't-stop-attestation bug: a slashed auditor
+    // (zeroed bond) must NOT be able to record a new audit.
+    function test_SlashedAuditor_CannotAttest() public {
+        _registerAuditor(auditor);
+        SampleTarget target = new SampleTarget();
+        (IAuditRegistry.Attestation memory att, bytes memory sig) =
+            _signAttestation(address(target), keccak256("first"), 1, false, 0);
+        registry.recordAudit(att, sig, "0.8.20", "", "");
+
+        // Slashed.
+        vm.prank(owner);
+        registry.slashAuditor(auditor, "bad faith");
+
+        // A fresh attestation signed by the slashed auditor must revert. The
+        // contract checks `registered` first (false after slash).
+        (IAuditRegistry.Attestation memory att2, bytes memory sig2) =
+            _signAttestation(address(target), keccak256("second"), 2, false, 1);
+        vm.expectRevert(bytes("Signer not registered"));
+        registry.recordAudit(att2, sig2, "0.8.20", "", "");
+    }
+
+    // Regression for the unbound-bundle bug: a relayer cannot attach a bundle
+    // whose hash differs from the signed reportHash.
+    function test_RecordAudit_RevertsOn_BundleHashMismatch() public {
+        _registerAuditor(auditor);
+        SampleTarget target = new SampleTarget();
+        (IAuditRegistry.Attestation memory att, bytes memory sig) =
+            _signAttestation(address(target), keccak256("real-report"), 1, false, 0);
+        bytes memory tamperedBundle = bytes("this is not the real bundle");
+        vm.expectRevert(bytes("Bundle hash mismatch"));
+        registry.recordAudit(att, sig, "0.8.20", tamperedBundle, "");
+    }
+
+    function test_Sweep_RecoversStrandedETH() public {
+        // Strand some ETH via receive().
+        (bool ok,) = payable(address(registry)).call{value: 0.5 ether}("");
+        require(ok);
+        assertEq(address(registry).balance, 0.5 ether, "strand");
+
+        uint256 ownerBefore = owner.balance;
+        vm.prank(owner);
+        registry.sweep(payable(owner));
+        assertEq(address(registry).balance, 0, "swept clean");
+        assertEq(owner.balance, ownerBefore + 0.5 ether, "owner received");
+
+        // Non-owner cannot sweep.
+        vm.expectRevert();
+        vm.prank(other);
+        registry.sweep(payable(other));
     }
 }
